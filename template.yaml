@@ -2,6 +2,72 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 
 Resources:
+  TexttractQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: texttract-queue
+      # Optional but recommended settings
+      VisibilityTimeout: 300  # Should be greater than Lambda timeout
+      MessageRetentionPeriod: 1209600  # 14 days
+      # Add if you need FIFO queue
+      # FifoQueue: false
+
+  NestJsLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaSQSPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:SendMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource: !GetAtt TexttractQueue.Arn  # Changed to use dynamic ARN
+        - PolicyName: CloudWatchLogsPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*" # Allows writing to any CloudWatch log group
+        - PolicyName: S3UploadPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:GetObject  # Optional: Allow read access if needed
+                Resource: "arn:aws:s3:::dev-issuer-documents/*" # Replace with your bucket name
+        # - PolicyName: DynamoDBPermissions
+        #   PolicyDocument:
+        #     Version: '2012-10-17'
+        #     Statement:
+        #       - Effect: Allow
+        #         Action:
+        #           - dynamodb:GetItem
+        #           - dynamodb:PutItem
+        #           - dynamodb:Query
+        #           - dynamodb:Scan
+        #           - dynamodb:UpdateItem
+        #         Resource: "arn:aws:dynamodb:ap-southeast-1:your-account-id:table/your-table-name"                
+
   NestJsLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -10,9 +76,29 @@ Resources:
       CodeUri: ./dist
       MemorySize: 512
       Timeout: 30
+      Role: !GetAtt NestJsLambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref TexttractQueue  # Add queue URL as environment variable
       Events:
         Api:
           Type: Api
           Properties:
             Path: /{proxy+}
             Method: ANY
+
+  LambdaSQSPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NestJsLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceArn: !GetAtt TexttractQueue.Arn
+
+Outputs:
+  QueueURL:
+    Description: "URL of the SQS Queue"
+    Value: !Ref TexttractQueue
+  QueueARN:
+    Description: "ARN of the SQS Queue"
+    Value: !GetAtt TexttractQueue.Arn
