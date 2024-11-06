@@ -13,9 +13,16 @@ export class SqsUtilService {
     private readonly region = 'ap-southeast-1';
 
     constructor(private configService: ConfigService) {
+        const accessKeyId = this.configService.get<string>('PRI_AWS_ACCESS_KEY');
+        const secretAccessKey = this.configService.get<string>('PRI_AWS_SECRET_KEY');
+
         this.sqsClient = new SQSClient({
             region: this.region,
             endpoint: `https://sqs.${this.region}.amazonaws.com`,
+            credentials: {
+                accessKeyId,
+                secretAccessKey
+            }
         });
     }
 
@@ -23,7 +30,11 @@ export class SqsUtilService {
         return this.sqsClient;
     }
 
-    async sendSqsMessage(queueUrl: string, messageBody: any, delaySeconds?: number) {
+    async sendSqsMessage({ queueUrl, messageBody, delaySeconds = 0 }: {
+        queueUrl: string;
+        messageBody: any;
+        delaySeconds?: number;
+    }) {
         const params: SendMessageCommandInput = {
             QueueUrl: queueUrl,
             MessageBody: JSON.stringify(messageBody),

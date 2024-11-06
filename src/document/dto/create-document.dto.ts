@@ -1,5 +1,8 @@
 export class CreateDocumentDto {
     name: string;
-    type: string;     
-    data: string;
+    type: string;
+    fileName: string; 
+    fileType: string;
+    url: string;
+    fileId: string;
 }

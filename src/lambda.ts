@@ -23,12 +23,13 @@ async function handleSQSEvent(record: any) {
 
     // Parse the message body
     const messageBody = JSON.parse(record.body);
-    console.log('Processing SQS message:', messageBody);
-
     // Process the message based on some condition or type
     switch (messageBody.type) {
       case 'PROCESS_DOCUMENT':
         await documentService.processDocument(messageBody.data);
+        break;
+      case 'PARSE_DOCUMENT':
+        await documentService.parseDocument(messageBody.data);
         break;
       default:
         console.log('Unknown message type:', messageBody.type);
@@ -63,15 +64,32 @@ export const handler = async (event: any, context: any) => {
 
       return {
         statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Credentials': true,
+        },
         body: JSON.stringify({ results }),
       };
     }
 
-    return server(event, context);
+    const response = await server(event, context);
+
+    // Add CORS headers to the server response
+    response.headers = {
+      ...response.headers,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': true,
+    };
+
+    return response;
   } catch (error) {
     console.error('Error in lambda handler:', error);
     return {
       statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true,
+      },
       body: JSON.stringify({
         message: 'Internal server error',
         error: error.message

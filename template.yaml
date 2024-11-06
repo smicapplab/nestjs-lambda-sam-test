@@ -55,18 +55,28 @@ Resources:
                   - s3:PutObjectAcl
                   - s3:GetObject  # Optional: Allow read access if needed
                 Resource: "arn:aws:s3:::dev-issuer-documents/*" # Replace with your bucket name
-        # - PolicyName: DynamoDBPermissions
-        #   PolicyDocument:
-        #     Version: '2012-10-17'
-        #     Statement:
-        #       - Effect: Allow
-        #         Action:
-        #           - dynamodb:GetItem
-        #           - dynamodb:PutItem
-        #           - dynamodb:Query
-        #           - dynamodb:Scan
-        #           - dynamodb:UpdateItem
-        #         Resource: "arn:aws:dynamodb:ap-southeast-1:your-account-id:table/your-table-name"                
+        - PolicyName: TextractPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - textract:StartDocumentAnalysis
+                  - textract:AnalyzeDocument
+                  - textract:GetDocumentAnalysis
+                Resource: "*"  # Adjust this if you want to limit the Textract resource permissions                
+        - PolicyName: DynamoDBPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:UpdateItem
+                Resource: "arn:aws:dynamodb:ap-southeast-1:677276099564:table/tr-demo-ocr"                
 
   NestJsLambdaFunction:
     Type: AWS::Serverless::Function
