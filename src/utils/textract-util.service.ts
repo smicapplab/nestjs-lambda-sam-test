@@ -130,10 +130,13 @@ export class TextractUtilService {
             if (block.BlockType === 'KEY_VALUE_SET' && block.EntityTypes?.includes('KEY')) {
                 const key = this.removeColonOrSemicolonAtEnd(this.getText(block, blockMap));
                 const valueBlock = block.Relationships?.find(rel => rel.Type === 'VALUE');
-
-                if (valueBlock && valueBlock.Ids.length > 0) {
-                    const value = this.getText(blockMap[valueBlock.Ids[0]], blockMap);
-                    fields[key] = value;
+                // Check if key is not empty
+                if (key) {
+                    const valueBlock = block.Relationships?.find(rel => rel.Type === 'VALUE');
+                    if (valueBlock && valueBlock.Ids.length > 0) {
+                        const value = this.getText(blockMap[valueBlock.Ids[0]], blockMap);
+                        fields[key] = value ?? "";
+                    }
                 }
             }
         });

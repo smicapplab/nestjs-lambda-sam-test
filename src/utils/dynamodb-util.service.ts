@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, PutCommandOutput, UpdateCommandOutput, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommandInput, UpdateCommand, PutCommandOutput, UpdateCommandOutput, QueryCommandInput, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 interface DynamoItem {
     pk: string;
@@ -18,6 +18,19 @@ interface FindOneParams {
     pk: string;
     sk?: string;
     tableName: string;
+}
+
+interface FindParams {
+    pk?: string;
+    sk?: string;
+    FilterExpression?: string;
+    ProjectionExpression?: any;
+    ExpressionAttributeNames?: any;
+    ExpressionAttributeValues?: Record<string, any>;
+    tableName: string;
+    limit?: number;
+    lastEvaluatedKey?: Record<string, any>;
+    sort?: "ASC" | "DESC";
 }
 
 interface UpdateOneParams {
@@ -89,6 +102,7 @@ export class DynamodbUtilService {
             }
 
             const data = await this.documentClient.send(new GetCommand(params));
+
             return data.Item as DynamoItem || null;
         } catch (error) {
             console.error(error, params);
@@ -141,7 +155,6 @@ export class DynamodbUtilService {
                 },
             };
 
-            //console.log(params);
             const response = await this.documentClient.send(new UpdateCommand(params));
             return response;
         } catch (error) {
@@ -162,42 +175,54 @@ export class DynamodbUtilService {
         FilterExpression,
         ExpressionAttributeValues,
         sort = "ASC",
-    }: {
-        indexName?: string;
-        query: Record<string, any>;
-        limit?: number;
-        tableName: string;
-        lastEvaluatedKey?: Record<string, any> | null;
-        fromDate?: string | null;
-        toDate?: string | null;
-        range?: string | null;
-        FilterExpression?: string;
-        ExpressionAttributeValues?: Record<string, any>;
-        sort?: "ASC" | "DESC";
-    }): Promise<any> {
+    }) {
         const queryKeys = Object.keys(query);
-        const params: any = {
+        let KeyConditionExpression = queryKeys
+            .map((k, index) => `${k} = :value${index}`)
+            .join(" AND ");
+
+        if (fromDate && range) {
+            KeyConditionExpression += ` AND ${range} BETWEEN :fromDate AND :toDate`;
+        }
+
+        let params: QueryCommandInput = {
             TableName: tableName,
             ScanIndexForward: sort === "ASC",
-            KeyConditionExpression: `${queryKeys
-                .map((k, index) => `${k} = :value${index}`)
-                .join(" AND ")}${fromDate ? ` AND ${range} BETWEEN :fromDate AND :toDate` : ""}`,
+            KeyConditionExpression,
             ExpressionAttributeValues: {
                 ...queryKeys.reduce(
-                    (acc, k, index) => ({
-                        ...acc,
+                    (accumulator, k, index) => ({
+                        ...accumulator,
                         [`:value${index}`]: query[k],
                     }),
                     {}
                 ),
-                ...(fromDate ? { ":fromDate": fromDate, ":toDate": toDate } : {}),
+                ...(fromDate && range ? { ":fromDate": fromDate, ":toDate": toDate } : {}),
             },
         };
 
-        if (indexName) params.IndexName = indexName;
-        if (limit) params.Limit = limit;
-        if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;
-        if (FilterExpression) params.FilterExpression = FilterExpression;
+        if (range) {
+            params.ExpressionAttributeNames = {
+                "#range": range, // Alias `range` in ExpressionAttributeNames if needed
+            };
+        }
+
+        if (indexName) {
+            params.IndexName = indexName;
+        }
+
+        if (limit) {
+            params.Limit = limit;
+        }
+
+        if (lastEvaluatedKey) {
+            params.ExclusiveStartKey = lastEvaluatedKey;
+        }
+
+        if (FilterExpression) {
+            params.FilterExpression = FilterExpression;
+        }
+
         if (ExpressionAttributeValues) {
             params.ExpressionAttributeValues = {
                 ...params.ExpressionAttributeValues,
@@ -205,16 +230,75 @@ export class DynamodbUtilService {
             };
         }
 
-        try {
-            const data = await this.documentClient.send(new QueryCommand(params));
-            return {
-                ...data,
-                LastEvaluatedKey: data.LastEvaluatedKey || null,
-            };
-        } catch (error) {
-            console.error("Error executing query:", error);
-            throw new Error("Failed to execute query");
-        }
+        // //console.log({ params });
+        // const data = await this.documentClient.send(new QueryCommand(params));
+        // return data;
+        const { Items, LastEvaluatedKey, Count } = await this.documentClient.send(new QueryCommand(params as QueryCommandInput));
+        console.log(Count)
+        return { Items, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
     }
 
+    async find({
+        pk,
+        sk,
+        FilterExpression,
+        ExpressionAttributeValues,
+        ProjectionExpression,
+        ExpressionAttributeNames,
+        tableName,
+        limit,
+        lastEvaluatedKey = null,
+        sort = "ASC",
+    }: FindParams) {
+        let params: QueryCommandInput | ScanCommandInput = {
+            TableName: tableName,
+            ScanIndexForward: sort === "ASC",
+        };
+
+        if (limit) {
+            params.Limit = limit;
+        }
+
+        if (ProjectionExpression) {
+            params.ProjectionExpression = ProjectionExpression;
+        }
+
+        if (ExpressionAttributeNames) {
+            params.ExpressionAttributeNames = ExpressionAttributeNames;
+        }
+
+        if (lastEvaluatedKey) {
+            params.ExclusiveStartKey = lastEvaluatedKey;
+        }
+
+        if (FilterExpression) params.FilterExpression = FilterExpression;
+        if (ExpressionAttributeValues) params.ExpressionAttributeValues = ExpressionAttributeValues;
+
+        if (!pk) {
+            const scanData = await this.documentClient.send(new ScanCommand(params as ScanCommandInput));
+            return scanData;
+        }
+
+        if (sk) {
+            params["KeyConditionExpression"] = "pk = :pk AND sk = :sk";
+            params["ExpressionAttributeValues"] = { ":pk": pk, ":sk": sk };
+        } else {
+            params["KeyConditionExpression"] = "pk = :pk";
+            params["ExpressionAttributeValues"] = { ":pk": pk };
+        }
+
+        if (FilterExpression) {
+            params.FilterExpression = FilterExpression;
+        }
+
+        if (ExpressionAttributeValues) {
+            params.ExpressionAttributeValues = {
+                ...params.ExpressionAttributeValues,
+                ...ExpressionAttributeValues,
+            };
+        }
+
+        const { Items, LastEvaluatedKey, Count } = await this.documentClient.send(new QueryCommand(params as QueryCommandInput));
+        return { Items, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
+    }
 }

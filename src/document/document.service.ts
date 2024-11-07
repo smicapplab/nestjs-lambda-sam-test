@@ -25,6 +25,32 @@ export class DocumentService {
     this.queueUrl = this.configService.get<string>('AWS_SQS_QUEUE_URL');
   }
 
+
+  async findAll({ parsedKey, status }: { parsedKey: any, status: string }) {
+
+    if (status) {
+      //@ts-ignore
+      const record = await this.dynamodbUtilService.findByIndex({
+        indexName: "currentStep-index",
+        query: { currentStep: status },
+        tableName: this.trOcrTableName,
+        lastEvaluatedKey: parsedKey,
+        limit: 10,
+      })
+
+      return record;
+    } else {
+      const records = await this.dynamodbUtilService.find({
+        pk: "pam-ocr",
+        tableName: this.trOcrTableName,
+        limit: 10,
+        lastEvaluatedKey: parsedKey
+      })
+
+      return records;
+    }
+  }
+
   async create(createDocumentDto: CreateDocumentDto) {
     try {
       const { name, fileName, fileType, url, fileId } = createDocumentDto
@@ -75,6 +101,7 @@ export class DocumentService {
 
   async findOne(jobId: string) {
     try {
+      //@ts-ignore
       const dynamodbResp = await this.dynamodbUtilService.findByIndex({
         indexName: "gsi1-index",
         query: { gsi1pk: jobId },
@@ -89,7 +116,7 @@ export class DocumentService {
       return { data: null, error: `Data not found: ${jobId}` }
 
     } catch (error) {
-      console.error(error);
+      console.error("document.service:::findOne", error);
       return { data: null, error }
     }
   }
@@ -131,7 +158,6 @@ export class DocumentService {
       return { success: false, error }
     }
   }
-
 
   async processDocument(data: any) {
     const { error } = await this.getDocumentAnalysis(data?.jobId)
@@ -183,6 +209,7 @@ export class DocumentService {
 
       const blocks = await this.s3UtilService.readJsonFileFromS3(this.bucket, record.blocks)
       const { data, error } = await this.textractUtilService.parseTextractResponse(blocks)
+
 
       await this.dynamodbUtilService.updateOne({
         tableName: this.trOcrTableName,
