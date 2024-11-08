@@ -234,8 +234,7 @@ export class DynamodbUtilService {
         // const data = await this.documentClient.send(new QueryCommand(params));
         // return data;
         const { Items, LastEvaluatedKey, Count } = await this.documentClient.send(new QueryCommand(params as QueryCommandInput));
-        console.log(Count)
-        return { Items, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
+        return { Items, Count, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
     }
 
     async find({
@@ -299,6 +298,6 @@ export class DynamodbUtilService {
         }
 
         const { Items, LastEvaluatedKey, Count } = await this.documentClient.send(new QueryCommand(params as QueryCommandInput));
-        return { Items, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
+        return { Items, Count, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
     }
 }

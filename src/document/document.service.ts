@@ -35,7 +35,8 @@ export class DocumentService {
         query: { currentStep: status },
         tableName: this.trOcrTableName,
         lastEvaluatedKey: parsedKey,
-        limit: 10,
+        limit: 5,
+        sort: "DESC"
       })
 
       return record;
@@ -43,7 +44,7 @@ export class DocumentService {
       const records = await this.dynamodbUtilService.find({
         pk: "pam-ocr",
         tableName: this.trOcrTableName,
-        limit: 10,
+        limit: 5,
         lastEvaluatedKey: parsedKey
       })
 
