@@ -45,6 +45,7 @@ export class DocumentService {
         pk: "pam-ocr",
         tableName: this.trOcrTableName,
         limit: 5,
+        sort: "DESC",
         lastEvaluatedKey: parsedKey
       })
 
@@ -192,6 +193,16 @@ export class DocumentService {
       return { success: false, error }
     }
 
+    await this.sqsUtilService.sendSqsMessage({
+      queueUrl: this.queueUrl,
+      messageBody: {
+        type: 'REFINE_DOCUMENT',
+        data: {
+          jobId: data?.jobId,
+        },
+      }
+    })
+
     return {
       success: true,
       message: 'Document processed successfully',
@@ -228,6 +239,49 @@ export class DocumentService {
       console.error(error);
       return { success: false, error }
     }
+  }
+
+  async refineTextractResponse(jobId: string) {
+    try {
+      const { data: record, error: recordErr } = await this.findOne(jobId);
+      if (recordErr) {
+        console.error(recordErr)
+        return { data: null, error: recordErr }
+      }
+
+      const { accountName, businessName } = record.form
+      const searchSk = `${accountName} ${businessName}`.toLowerCase()
+
+      await this.dynamodbUtilService.updateOne({
+        tableName: this.trOcrTableName,
+        item: {
+          pk: record.pk,
+          sk: record.sk,
+          currentStep: "PARTIAL:REFINED",
+          searchPk: "cam-search",
+          searchSk,
+        }
+      });
+
+      return { data: `Refined Successfully: ${jobId}` };
+    } catch (error) {
+      console.error(error);
+      return { success: false, error }
+    }
+  }
+
+  async refineDocument(data: any) {
+    const { error } = await this.refineTextractResponse(data?.jobId)
+    if (error) {
+      return { success: false, error }
+    }
+
+    return {
+      success: true,
+      message: 'Document refined successfully',
+      data: data,
+      error: null,
+    };
   }
 
 }

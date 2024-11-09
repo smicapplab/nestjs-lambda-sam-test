@@ -31,6 +31,9 @@ async function handleSQSEvent(record: any) {
       case 'PARSE_DOCUMENT':
         await documentService.parseDocument(messageBody.data);
         break;
+      case 'REFINE_DOCUMENT':
+        await documentService.refineDocument(messageBody.data);
+        break;  
       default:
         console.log('Unknown message type:', messageBody.type);
     }

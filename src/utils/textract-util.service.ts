@@ -6,7 +6,9 @@ type Block = {
     Id: string;
     BlockType: 'WORD' | 'LINE' | 'KEY_VALUE_SET' | 'TABLE' | 'CELL' | string;
     Text?: string;
+    Confidence?: number;
     RowIndex?: number;
+    Page?: number;
     ColumnIndex?: number;
     EntityTypes?: string[];
     Relationships?: Relationship[];
@@ -216,12 +218,57 @@ export class TextractUtilService {
         return table;
     }
 
+    calculateAverageConfidence(blocks: Block[]): number {
+        const confidenceScores = blocks
+            .filter(block => block.Confidence !== undefined)
+            .map(block => block.Confidence as number);
+
+        if (confidenceScores.length === 0) return 0;
+        const totalConfidence = confidenceScores.reduce((sum, score) => sum + score, 0);
+        return totalConfidence / confidenceScores.length;
+    }
+
+    extractHandwrittenSentences(blocks: Block[]): { page: number; confidence: number; sentence: string }[] {
+        const handwrittenThreshold = 85;
+        const sentences: { page: number; confidence: number; sentence: string }[] = [];
+
+        // Filter out lines with confidence below the threshold
+        const lineBlocks = blocks.filter(
+            block => block.BlockType === 'LINE' && block.Confidence !== undefined && block.Confidence < handwrittenThreshold
+        );
+
+        lineBlocks.forEach(lineBlock => {
+            const wordIds = lineBlock.Relationships?.find(rel => rel.Type === 'CHILD')?.Ids || [];
+            const wordsWithConfidence = wordIds
+                .map(id => blocks.find(block => block.Id === id && block.BlockType === 'WORD'))
+                .filter((word): word is Block => !!word && typeof word.Text === 'string');
+
+            // Extract words and calculate the average confidence
+            const words = wordsWithConfidence.map(word => word.Text);
+            const averageConfidence = wordsWithConfidence.reduce((sum, word) => sum + (word.Confidence ?? 0), 0) / wordsWithConfidence.length;
+
+            // Combine words into a sentence
+            if (words.length > 0) {
+                const sentence = words.join(' ');
+                sentences.push({
+                    page: lineBlock.Page ?? 1,
+                    confidence: parseFloat(averageConfidence.toFixed(2)),
+                    sentence
+                });
+            }
+        });
+
+        return sentences;
+    }
+
     async parseTextractResponse(blocks: any) {
         try {
             const form = this.parseForm(blocks)
             const table = this.parseTable(blocks);
+            const confidence = this.calculateAverageConfidence(blocks)
+            let handwritten = this.extractHandwrittenSentences(blocks)
 
-            return { data: { form, table }, error: null }
+            return { data: { form, table, confidence, handwritten }, error: null }
         } catch (error) {
             console.error(error)
             return { data: null, error }

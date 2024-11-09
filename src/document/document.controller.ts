@@ -12,7 +12,7 @@ export class DocumentController {
     @Query('status') status?: string
   ) {
     const parsedKey = lastEvaluatedKey ? JSON.parse(lastEvaluatedKey) : undefined;
-    return await this.documentService.findAll({parsedKey, status});
+    return await this.documentService.findAll({ parsedKey, status });
   }
 
   @Post()
