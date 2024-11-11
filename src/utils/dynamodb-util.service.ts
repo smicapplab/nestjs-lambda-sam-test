@@ -303,9 +303,16 @@ export class DynamodbUtilService {
 
     async getItemCount(tableName: any) {
         try {
-            const command = new DescribeTableCommand({ TableName: tableName });
+            // const command = new DescribeTableCommand({ TableName: tableName });
+            // const data = await this.documentClient.send(command);
+            // return { data: data.Table.ItemCount };
+
+            const command = new ScanCommand({
+                TableName: tableName,
+                Select: 'COUNT'
+            });
             const data = await this.documentClient.send(command);
-            return { data: data.Table.ItemCount };
+            return data.Count;
 
         } catch (error) {
             return { error }
