@@ -24,4 +24,10 @@ export class DocumentController {
   async update(@Param('id') jobId: string, @Body() data: any) {
     return await this.documentService.parseTextractResponse(jobId);
   }
+
+  @Post('count')
+  async count() {
+    const count = await this.documentService.getItemCount();
+    return count;
+  }
 }

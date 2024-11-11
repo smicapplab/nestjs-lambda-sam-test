@@ -284,4 +284,10 @@ export class DocumentService {
     };
   }
 
+  async getItemCount() {
+    const response = await this.dynamodbUtilService.getItemCount(this.trOcrTableName)
+    return response
+
+  }
+
 }

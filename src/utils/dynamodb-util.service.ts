@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DescribeTableCommand, DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommandInput, UpdateCommand, PutCommandOutput, UpdateCommandOutput, QueryCommandInput, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 interface DynamoItem {
@@ -299,5 +299,16 @@ export class DynamodbUtilService {
 
         const { Items, LastEvaluatedKey, Count } = await this.documentClient.send(new QueryCommand(params as QueryCommandInput));
         return { Items, Count, LastEvaluatedKey: encodeURIComponent(JSON.stringify(LastEvaluatedKey)) };
+    }
+
+    async getItemCount(tableName: any) {
+        try {
+            const command = new DescribeTableCommand({ TableName: tableName });
+            const data = await this.documentClient.send(command);
+            return { data: data.Table.ItemCount };
+
+        } catch (error) {
+            return { error }
+        }
     }
 }
