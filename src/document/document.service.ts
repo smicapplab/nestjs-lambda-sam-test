@@ -6,6 +6,7 @@ import { TextractUtilService } from 'src/utils/textract-util.service';
 import { DynamodbUtilService } from 'src/utils/dynamodb-util.service';
 import { now } from 'src/utils/date-helper';
 import { S3UtilService } from 'src/utils/s3-util.service';
+import { OpenAI } from 'openai';
 
 @Injectable()
 export class DocumentService {
@@ -13,6 +14,8 @@ export class DocumentService {
   private bucket: string;
   private queueUrl: string;
   private trOcrTableName: string = "tr-demo-ocr";
+  private openaiKey: string;
+  private openai: OpenAI;
 
   constructor(
     private readonly textractUtilService: TextractUtilService,
@@ -23,6 +26,10 @@ export class DocumentService {
   ) {
     this.bucket = this.configService.get<string>('AWS_ISUER_BUCKET');
     this.queueUrl = this.configService.get<string>('AWS_SQS_QUEUE_URL');
+    this.openaiKey = this.configService.get<string>('OPENAI_API_KEY')
+    this.openai = new OpenAI({
+      apiKey: this.openaiKey, // Ensure this environment variable is set
+    });
   }
 
 
@@ -241,6 +248,63 @@ export class DocumentService {
     }
   }
 
+  private cleanResponse = (response) => {
+    // Remove common prefixes and suffixes
+    return response.replace(/^'''json|```json|```|'''/g, "").trim();
+  };
+
+  private parseJSON = (response) => {
+    try {
+      const cleanedResponse = this.cleanResponse(response);
+      return JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error("Error parsing JSON:", error.message);
+      console.error("Raw Response:", response);
+      return null; // Return null or handle the error as needed
+    }
+  };
+
+  private classifyDocument = async (text) => {
+    try {
+      let response = await this.openai.chat.completions.create({
+        model: "gpt-4o-mini", // Use GPT-4 if available for better performance
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a helpful assistant who classify, extract, and summarize the following document into one of these categories (e.g., legal, financial, marketing), classification (e.g., Purchase Prder, Credit Assessment Memo, Invoice, Receipt, Contract, or Unknown.) ',
+          },
+          {
+            role: 'user',
+            content: `
+                    Generate summary, pages count, relevant dates, numbers, contact information, and category and other information:
+                    Content: ${text}
+                    Output format:
+                        { "summary": "Question 1", "classification": "", "category": "Answer 1", pagesCount: 0, relevantDates: [{ label: Expiration, date: 'Iso date'  }], contact: [{fullName: "Alex Sy", number: "63918765432", email: "" }],            
+                `,
+          },
+        ],
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+
+      const openaiResponse = response.choices[0].message.content;
+      const parsedData = this.parseJSON(openaiResponse);
+      console.log(parsedData)
+      return parsedData;
+    } catch (error) {
+      console.error("Error classifying document with OpenAI:", error);
+      throw error;
+    }
+  };
+
+  private extractTextFromBlocks = (blocks: any) => {
+    return blocks
+      .filter(block => block.BlockType === "LINE") // Get only LINE blocks
+      .map(block => block.Text) // Extract the text content
+      .join(" "); // Combine into a single string
+  };
+
   async refineTextractResponse(jobId: string) {
     try {
       const { data: record, error: recordErr } = await this.findOne(jobId);
@@ -248,6 +312,10 @@ export class DocumentService {
         console.error(recordErr)
         return { data: null, error: recordErr }
       }
+
+      const blocks = await this.s3UtilService.readJsonFileFromS3(this.bucket, record.blocks)
+      const text = this.extractTextFromBlocks(blocks)
+      const { summary, classification, category, relevantDates, pagesCount, contact,  } = await this.classifyDocument(text)
 
       const { accountName, businessName } = record.form
       const searchSk = `${accountName} ${businessName}`.toLowerCase()
@@ -257,9 +325,15 @@ export class DocumentService {
         item: {
           pk: record.pk,
           sk: record.sk,
-          currentStep: "PARTIAL:REFINED",
+          currentStep: "PARTIAL:CLASSIFIED",
           searchPk: "cam-search",
           searchSk,
+          summary, 
+          classification, 
+          category, 
+          relevantDates, 
+          pagesCount, 
+          contact
         }
       });
 

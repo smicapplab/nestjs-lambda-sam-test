@@ -22,7 +22,7 @@ export class DocumentController {
 
   @Patch(':id')
   async update(@Param('id') jobId: string, @Body() data: any) {
-    return await this.documentService.parseTextractResponse(jobId);
+    return await this.documentService.refineTextractResponse(jobId);
   }
 
   @Post('count')
