@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 
+Parameters:
+  DynamoDBTableName:
+    Type: String
+    Description: The DynamoDB table name
+    Default: "tr-demo-ocr"  
+
 Resources:
   TexttractQueue:
     Type: AWS::SQS::Queue
@@ -76,7 +82,7 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                   - dynamodb:UpdateItem
-                Resource: "arn:aws:dynamodb:ap-southeast-1:677276099564:table/tr-demo-ocr"                
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}                
 
   NestJsLambdaFunction:
     Type: AWS::Serverless::Function
